@@ -8,104 +8,78 @@ public class KdTree {
     private class Node2D {
         
         private Point2D p;    // point
-        private boolean xcut; // true if veritcal cut - by x
         private Node2D l;     // lower value - left or bottom
         private Node2D h;     // higher value - right or top
         
-        public Node2D(Point2D p, boolean xcut) {
+        public Node2D(Point2D p) {
             this.p = p;
-            this.xcut = xcut;
+            this.l = null;
+            this.h = null;
         }
         
-        private int insertL(Point2D q)
-        {
-            if (this.l != null)
-            {
-                return this.l.insert(q);
-            }
-            else
-            {
-                this.l = new Node2D(q, !this.xcut);
-                return 1;
-            }                
-        }
-        
-        private int insertH(Point2D q)
-        {
-            if (this.h != null)
-            {
-                return this.h.insert(q);
-            }
-            else
-            {
-                this.h = new Node2D(q, !this.xcut);
-                return 1;
-            }                
-        }
-        
-        public int insert(Point2D q) {
+        public int insert(Point2D q, boolean xcut) {
 
             if (this.p.equals(q))
             {
                 return 0;
             }
             
-            if (this.xcut && q.x() < this.p.x())
+            if ((xcut && q.x() < this.p.x())
+                    || (!xcut && q.y() < this.p.y()))
             {
-                return insertL(q);
-            }
-            else if (!this.xcut && q.y() < this.p.y())
-            {
-                return insertL(q);                
-            }
-            else
-            {
-                return insertH(q);
-            }
-        }
-        
-        private boolean containsL(Point2D q)
-        {
-            if (this.l != null)
-            {
-                return this.l.contains(q);
+                if (this.l != null)
+                {
+                    return this.l.insert(q, !xcut);
+                }
+                else
+                {
+                    this.l = new Node2D(q);
+                    return 1;
+                }                
             }
             else
             {
-                return false;
+                if (this.h != null)
+                {
+                    return this.h.insert(q, !xcut);
+                }
+                else
+                {
+                    this.h = new Node2D(q);
+                    return 1;
+                }
             }
         }
         
-        private boolean containsH(Point2D q)
-        {
-            if (this.h != null)
-            {
-                return this.h.contains(q);
-            }
-            else
-            {
-                return false;
-            }
-        }
-        
-        public boolean contains(Point2D q)
+        public boolean contains(Point2D q, boolean xcut)
         {
             if (this.p.equals(q))
             {
                 return true;
             }
             
-            if (this.xcut && q.x() < this.p.x())
+            if ((xcut && q.x() < this.p.x())
+                    || (!xcut && q.y() < this.p.y()))
             {
-                return containsL(q);
-            }
-            else if (!this.xcut && q.y() < this.p.y())
-            {
-                return containsL(q);              
+                if (this.l != null)
+                {
+                    return this.l.contains(q, !xcut);
+                }
+                else
+                {
+                    return false;
+                }
             }
             else
             {
-                return containsH(q);
+                if (this.h != null)
+                {
+                    return this.h.contains(q, !xcut);
+                }
+                else
+                {
+                    return false;
+                }
             }
         }
 
@@ -123,95 +97,104 @@ public class KdTree {
             }
         }
         
-        public void range(ArrayList<Point2D> a, RectHV r)
+        public void range(ArrayList<Point2D> a, RectHV r, boolean xcut)
         {
             if (r.contains(this.p))
             {
                 a.add(p);
             }
             
-            if (this.xcut)
+            if (xcut)
             {
                 if (this.p.x() >= r.xmin() && this.l != null)
                 {
-                    this.l.range(a, r);
+                    this.l.range(a, r, !xcut);
                 }
                 if (this.p.x() <= r.xmax() && this.h != null)
                 {
-                    this.h.range(a, r);
+                    this.h.range(a, r, !xcut);
                 }
             }
             else
             {
                 if (this.p.y() >= r.ymin() && this.l != null)
                 {
-                    this.l.range(a, r);
+                    this.l.range(a, r, !xcut);
                 }
                 if (this.p.y() <= r.ymax() && this.h != null)
                 {
-                    this.h.range(a, r);
+                    this.h.range(a, r, !xcut);
                 }
             }
         }
         
-        private class PointDist {
-            
-            private Point2D p;
-            private double d;
-            
-            public PointDist(Point2D p, double d) {
-                this.p = p;
-                this.d = d;
-            }
-            
-            public Point2D p() { return p; }
-            public double d() { return d; }
-            
-            public void update(Point2D q, double dist)
-            {
-                if (this.d > dist)
-                {
-                    this.d = dist;
-                    this.p = q;
-                }
-            }
-        }   
-        
-        private void nearest(Point2D q, PointDist best)
+        private void nearest(Point2D q, PointDist best, RectHV bbox, boolean xcut)
         {
-            best.update(this.p, this.p.distanceTo(q));
+            best.update(this.p, this.p.distanceSquaredTo(q));
 
-            if (this.xcut)
+            if (xcut)
             {
-                if (q.x() - this.p.x() < best.d() && this.l != null)
+                if (this.l != null)
                 {
-                    this.l.nearest(q, best);
+                    RectHV left = new RectHV(bbox.xmin(), bbox.ymin(), this.p.x(), bbox.ymax());
+                    if (left.distanceSquaredTo(q) < best.d())
+                    {
+                        this.l.nearest(q, best, left, !xcut);
+                    }
                 }
-                if (this.p.x() - q.x() < best.d() && this.h != null)
+                if (this.h != null)
                 {
-                    this.h.nearest(q, best);
+                    RectHV right = new RectHV(this.p.x(), bbox.ymin(), bbox.xmax(), bbox.ymax());
+                    if (right.distanceSquaredTo(q) < best.d())
+                    {
+                        this.h.nearest(q, best, right, !xcut);
+                    }
                 }
             }
             else
             {
-                if (q.y() - this.p.y() < best.d() && this.l != null)
+                if (this.l != null)
                 {
-                    this.l.nearest(q, best);
+                    RectHV bottom = new RectHV(bbox.xmin(), bbox.ymin(), bbox.xmax(), this.p.y());
+                    if (bottom.distanceSquaredTo(q) < best.d())
+                    {
+                        this.l.nearest(q, best, bottom, !xcut);
+                    }
                 }
-                if (this.p.y() - q.y() < best.d() && this.h != null)
+                if (this.h != null)
                 {
-                    this.h.nearest(q, best);
+                    RectHV top = new RectHV(bbox.xmin(), this.p.y(), bbox.xmax(), bbox.ymax());
+                    if (top.distanceSquaredTo(q) < best.d())
+                    {
+                        this.h.nearest(q, best, top, !xcut);
+                    }
                 }
             }
         }
-        
-        public Point2D nearest(Point2D q) {
-            
-            PointDist pd = new PointDist(this.p, this.p.distanceTo(q));
-            nearest(q, pd);
-            return pd.p();
-        }        
     }
+    
+    private class PointDist {
+        
+        private Point2D p;
+        private double d;
+        
+        public PointDist(Point2D p, double d) {
+            this.p = p;
+            this.d = d;
+        }
+        
+        public Point2D p() { return p; }
+        public double d() { return d; }
+        
+        public void update(Point2D q, double dist)
+        {
+            if (this.d > dist)
+            {
+                this.d = dist;
+                this.p = q;
+            }
+        }
+    }   
     
     /**
      * construct an empty set of points
@@ -245,12 +228,12 @@ public class KdTree {
         
         if (root == null)
         {
-            root = new Node2D(p, true);
+            root = new Node2D(p);
             count = 1;
         }
         else
         {
-            count += root.insert(p);
+            count += root.insert(p, true);
         }
     }
     
@@ -265,7 +248,7 @@ public class KdTree {
         }
         else
         {
-            return root.contains(p);
+            return root.contains(p, true);
         }
     }
     
@@ -289,7 +272,7 @@ public class KdTree {
         
         if (root != null)
         {
-            root.range(a, rect);
+            root.range(a, rect, true);
         }
 
         return a;
@@ -302,8 +285,10 @@ public class KdTree {
 
         if (root != null)
         {
-            return root.nearest(q);
-        }
+            PointDist pd = new PointDist(null, Double.POSITIVE_INFINITY);
+            root.nearest(q, pd, new RectHV(0.0, 0.0, 1.0, 1.0), true);
+            return pd.p();
+        }                   
         else
         {
             return null;
